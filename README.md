@@ -6,7 +6,7 @@ A real time-based sinthetizer made with python and pyqt5
 
 ### **Create virtualenv and install dependencies**
 
-    python -m virtualenv synth-juan-plazas
+    python -m virtualenv synth
     pip install -r requirements.txt
 
 ### **Run Synthetizer**

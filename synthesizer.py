@@ -326,7 +326,7 @@ class Synthesizer(QMainWindow):
         return armed_signal
 
     def init_synth(self):
-        # self.pill2kill = Event()
+        # self.t1 = Process(target=run_synth)
         self.t1 = Thread(target=run_synth, args=(self,), daemon=True)
         self.t1.do_run = True
         self.t1.start()
@@ -344,20 +344,27 @@ def run_synth(synth):
 
     p = pyaudio.PyAudio()
 
-    stream = p.open(format=pyaudio.paFloat32, channels=1, rate=synth.fs, output=True)
-    chunk = 1024
+    chunk = 2048
+    stream = p.open(
+        format=pyaudio.paFloat32,
+        channels=1,
+        rate=synth.fs,
+        output=True,
+        frames_per_buffer=chunk,
+    )
 
     # teclas, notas y banderas de estado parametrizadas
     keys = ["z", "s", "x", "d", "c", "v", "g", "b", "h", "n", "j", "m"]
     flags = [False for _ in range(14)]
     notes = [246, 261, 277, 293, 311, 329, 349, 369, 392, 415, 440, 466]
     octave = 1
-    zeros = np.sin(0 * synth.t * 2 * np.pi)
+    zeros = np.zeros(chunk)
     fade_in = np.linspace(0, 1, num=chunk)
     fade_out = np.linspace(1, 0, num=chunk)
+    played_chunk = 0
+    offset = 0
 
     # listener de presion de botones del teclado
-    print("")
     while t1.do_run:
         # time.sleep(0.002)
         if keyboard.is_pressed("q") and not flags[-1]:
@@ -379,24 +386,39 @@ def run_synth(synth):
         for i, j in enumerate(keys):
             if keyboard.is_pressed(j):
                 if not flags[i]:
-                    note = synth.waveform(
-                        synth.wave,
-                        notes[i] * octave,
-                        synth.calculate_ASDR(
-                            synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
-                        ),
-                    )
-                    data = note.astype(np.float32)
-                    data[:chunk] = data[:chunk] * fade_in
+                    flags = [False for _ in range(14)]
                     flags[i] = True
-                stream.write(data, chunk)
-                data = np.concatenate((data[chunk:], data[:chunk]))
+                    played_chunk = 0
+                note = synth.waveform(
+                    synth.wave,
+                    notes[i] * octave,
+                    synth.calculate_ASDR(
+                        synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
+                    ),
+                )
+                data = note.astype(np.float32)
+                init = played_chunk * chunk
+                windowed = data[
+                    init + offset : init + chunk + offset
+                ]  # * ph  # * np.hanning(chunk)
+                # print(max(note))
+                stream.write(windowed, chunk)
+                played_chunk += 1
+                if played_chunk == 15:  # synth.fs // 2048 x 15 = 30720
+                    offset = chunk * 14 % notes[i] * octave
+                    played_chunk = 14  # 246hz -> 179.2 x 170 = 30430
+                # else:
+                #     offset = 0
             elif flags[i] and not keyboard.is_pressed(j):
-                flags[i] = False
-                data[:chunk] = data[:chunk] * fade_out
-                stream.write(data, chunk)
+                init = played_chunk * chunk
+                windowed = data[init + offset : init + chunk + offset]
+                if played_chunk == 21:  # 44100 // 2048
+                    flags[i] = False
+                    windowed = zeros
+                stream.write(windowed, chunk)
+                played_chunk += 1
             else:
-                print("", end="")
+                print(".")
 
     stream.close()
     p.terminate()

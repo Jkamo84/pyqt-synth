@@ -24,7 +24,7 @@ from gui import GUI
 ## functioning AM modulation, filters, delays and waveforms
 ##################################################
 ## Author: Juan Camilo Plazas
-## Version: 0.0.2
+## Version: 0.1.0
 ## Email: jkamo_84@hotmail.com
 ## Status: development
 ##################################################
@@ -389,34 +389,86 @@ def run_synth(synth):
                     flags = [False for _ in range(14)]
                     flags[i] = True
                     played_chunk = 0
-                note = synth.waveform(
-                    synth.wave,
-                    notes[i] * octave,
-                    synth.calculate_ASDR(
-                        synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
-                    ),
+                    release_chunk = 0
+                signal = np.sin(
+                    2
+                    * np.pi
+                    * notes[i]
+                    * octave
+                    * np.linspace(
+                        (played_chunk * chunk) / synth.fs,
+                        ((played_chunk + 1) * chunk) / synth.fs,
+                        chunk,
+                        endpoint=False,
+                    )
                 )
-                data = note.astype(np.float32)
-                init = played_chunk * chunk
-                windowed = data[
-                    init + offset : init + chunk + offset
-                ]  # * ph  # * np.hanning(chunk)
-                # print(max(note))
-                stream.write(windowed, chunk)
+                envelope = synth.calculate_ASDR(
+                    synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
+                )
+                if played_chunk < 1 + (synth.a_knob + synth.d_knob) // chunk:
+                    signal *= envelope[
+                        (played_chunk * chunk) : ((played_chunk + 1) * chunk)
+                    ]
+                else:
+                    signal *= np.ones(chunk) * 10 ** (synth.s_knob / 11025) / 10
+                data = signal.astype(np.float32)
+                stream.write(data, chunk)
                 played_chunk += 1
-                if played_chunk == 15:  # synth.fs // 2048 x 15 = 30720
-                    offset = chunk * 14 % notes[i] * octave
-                    played_chunk = 14  # 246hz -> 179.2 x 170 = 30430
-                # else:
-                #     offset = 0
+                # if not flags[i]:
+                #     flags = [False for _ in range(14)]
+                #     flags[i] = True
+                #     played_chunk = 0
+                # note = synth.waveform(
+                #     synth.wave,
+                #     notes[i] * octave,
+                #     synth.calculate_ASDR(
+                #         synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
+                #     ),
+                # )
+                # data = note.astype(np.float32)
+                # init = played_chunk * chunk
+                # windowed = data[
+                #     init + offset : init + chunk + offset
+                # ]  # * ph  # * np.hanning(chunk)
+                # # print(max(note))
+                # stream.write(windowed, chunk)
+                # played_chunk += 1
+                # if played_chunk == 15:  # synth.fs // 2048 x 15 = 30720
+                #     offset = chunk * 14 % notes[i] * octave
+                #     played_chunk = 14  # 246hz -> 179.2 x 170 = 30430
+                # # else:
+                # #     offset = 0
             elif flags[i] and not keyboard.is_pressed(j):
-                init = played_chunk * chunk
-                windowed = data[init + offset : init + chunk + offset]
-                if played_chunk == 21:  # 44100 // 2048
-                    flags[i] = False
-                    windowed = zeros
-                stream.write(windowed, chunk)
+                # print(synth.r_knob)  # 11025
+                signal = np.sin(
+                    2
+                    * np.pi
+                    * notes[i]
+                    * octave
+                    * np.linspace(
+                        (played_chunk * chunk) / synth.fs,
+                        ((played_chunk + 1) * chunk) / synth.fs,
+                        chunk,
+                        endpoint=False,
+                    )
+                )
+                release = np.logspace(synth.s_knob / 11025, 0, synth.r_knob) / 10
+                release = np.concatenate((release, np.zeros(synth.fs)))
+                signal *= release[release_chunk * chunk : (release_chunk + 1) * chunk]
+                data = signal.astype(np.float32)
+                stream.write(data, chunk)
+                release_chunk += 1
                 played_chunk += 1
+                if release_chunk > 10:
+                    flags[i] = False
+                # flags[i] = False
+                # init = played_chunk * chunk
+                # windowed = data[init + offset : init + chunk + offset]
+                # if played_chunk == 21:  # 44100 // 2048
+                #     flags[i] = False
+                #     windowed = zeros
+                # stream.write(windowed, chunk)
+                # played_chunk += 1
             else:
                 print(".")
 

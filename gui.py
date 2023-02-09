@@ -70,9 +70,9 @@ class GUI:
         self.synth.mySlider6 = self.create_slider(
             "slider_filter",
             geo=(300, 260, 200, 30),
-            min=100,
+            min=200,
             max=8000,
-            default=100,
+            default=200,
             value_change=self.synth.set_filter,
         )
 

@@ -6,11 +6,11 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QCheckBox,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QObject, pyqtSignal
 import pyqtgraph as pg
 import numpy as np
 from scipy import signal
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, cheby1, lfilter
 import keyboard
 import pyaudio
 import time
@@ -30,6 +30,12 @@ from gui import GUI
 ##################################################
 
 
+class SignalCommunicate(QObject):
+    request_filter_update = pyqtSignal(np.ndarray, np.ndarray)
+    request_ADSR_update = pyqtSignal(np.ndarray, np.ndarray)
+    request_signal_update = pyqtSignal(np.ndarray, np.ndarray)
+
+
 class Synthesizer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -39,8 +45,6 @@ class Synthesizer(QMainWindow):
         self.fs = 44100
         self.LFO = np.ones(self.fs)
         self.t = np.linspace(0, 1, self.fs)
-        self.noise = (np.random.rand(self.fs) * 2) - 1
-        self.copy_noise = self.noise
         self.ftype = "low"
         self.forder = 4
         self.delay = True
@@ -88,6 +92,8 @@ class Synthesizer(QMainWindow):
 
         self.graphWidget2 = pg.PlotWidget(self)
         self.graphWidget2.setGeometry(650, 20, 300, 150)
+        # self.graphWidget2.setXRange(1, 5)
+        self.graphWidget2.setYRange(-1, 1)
 
         self.graphWidget3 = pg.PlotWidget(self)
         self.graphWidget3.setGeometry(650, 190, 300, 150)
@@ -145,24 +151,40 @@ class Synthesizer(QMainWindow):
         order = 12  # orden del filtro
         nyq = 0.5 * self.fs  # máxima frecuencia
         normal_cutoff = 100 / nyq  # calculo real de frecuencia de corte
-        b, a = butter(
-            order, normal_cutoff, btype="low", analog=False
+        b, a = cheby1(
+            order, 12, normal_cutoff, btype="low", analog=True
         )  # generacion de numerador y denominador del modelo matematico del filtro
         w, h = signal.freqs(b, a)
+        self.data_filter = self.graphWidget3.plot(w * 22050, 20 * np.log10(abs(h)))
         self.graphWidget3.setLogMode(True, False)
         self.graphWidget3.setXRange(1, 5)
-        self.graphWidget3.setYRange(-100, 100)
-        self.data_filter = self.graphWidget3.plot(w, 20 * np.log10(abs(h)))
+        self.graphWidget3.setYRange(-50, 10)
+        self.filter_state1 = np.zeros(4)
+        self.filter_state2 = np.zeros(8)
+
+        self.signal_comm = SignalCommunicate()
+        self.signal_comm.request_signal_update.connect(self.update_signal_graph)
+        self.signal_comm.request_ADSR_update.connect(self.update_ADSR_graph)
+        self.signal_comm.request_filter_update.connect(self.update_filter_graph)
 
         # inicializar ventana de GUI
         self.setGeometry(50, 50, 1100, 600)
         self.setWindowTitle("Synthesizer")
         self.show()
+
         self.init_synth()
+
+    def update_signal_graph(self, x, y):
+        self.signal_line.setData(x, y)
+
+    def update_ADSR_graph(self, x, y):
+        self.data_line.setData(x, y)
+
+    def update_filter_graph(self, x, y):
+        self.data_filter.setData(x, y)
 
     def set_delay(self):
         self.delay = self.mySlider8.value()
-        self.calculate_ASDR(self.a_knob, self.d_knob, self.s_knob, self.r_knob)
 
     def set_order(self):
         self.forder = self.mySlider7.value()
@@ -170,12 +192,14 @@ class Synthesizer(QMainWindow):
 
     def set_filter(self):
         normal_cutoff = self.mySlider6.value()
+        nyq = 0.5 * self.fs  # máxima frecuencia
+        normal_cutoff = normal_cutoff / nyq  # calculo real de frecuencia de corte
         if self.ftype in ["bandpass", "bandstop"]:
             b, a = butter(
                 self.forder,
                 [
-                    (normal_cutoff - self.mySliderQ.value() * 0.5),
-                    (normal_cutoff + self.mySliderQ.value() * 0.5),
+                    (normal_cutoff - self.mySliderQ.value() * 0.5 / nyq),
+                    (normal_cutoff + self.mySliderQ.value() * 0.5 / nyq),
                 ],
                 btype=self.ftype,
                 analog=True,
@@ -184,9 +208,10 @@ class Synthesizer(QMainWindow):
             b, a = butter(
                 self.forder, normal_cutoff, btype=self.ftype, analog=True
             )  # generacion de numerador y denominador del modelo matematico del filtro
+            b, a = cheby1(self.forder, 12, normal_cutoff, btype=self.ftype, analog=True)
         w, h = signal.freqs(b, a)
         y = 20 * np.log10(abs(h))
-        self.data_filter.setData(w, y)
+        self.signal_comm.request_filter_update.emit(w * 22050, y)
 
     def apply_filter(self, sig, cutoff):
         nyq = 0.5 * self.fs  # máxima frecuencia
@@ -201,12 +226,16 @@ class Synthesizer(QMainWindow):
                 btype=self.ftype,
                 analog=False,
             )  # generacion de numerador y denominador del modelo matematico del filtro
+            r, self.filter_state2 = lfilter(b, a, sig, axis=0, zi=self.filter_state2)
         else:
             b, a = butter(
                 self.forder, normal_cutoff, btype=self.ftype, analog=False
             )  # generacion de numerador y denominador del modelo matematico del filtro
+            b, a = cheby1(self.forder, 6, normal_cutoff, btype=self.ftype, analog=False)
+            r, self.filter_state1 = lfilter(b, a, sig, axis=0, zi=self.filter_state1)
+            if self.ftype == "low":
+                r *= 2
 
-        r = lfilter(b, a, sig)
         return r
 
     def onClickedF(self):
@@ -256,24 +285,26 @@ class Synthesizer(QMainWindow):
         s = np.ones(self.fs - len(a) - len(d) - len(r)) * 10 ** (s / 11025) / 10
 
         adsr = np.concatenate((a, d, s, r)) * 1.1 - 0.1
-        signal = self.waveform(self.wave, 15, adsr)
 
         # actualizacion de graficas
         if not self.started:
             self.data_line = self.graphWidget1.plot(self.t, adsr)
-            self.signal_line = self.graphWidget2.plot(self.t, signal)
+            self.signal_line = self.graphWidget2.plot(
+                np.linspace(0, 2048 / self.fs, 2048), np.zeros(2048)
+            )
             self.started = True
         else:
-            self.signal_line.setData(self.t, signal)
-            self.data_line.setData(self.t, adsr)
+            self.signal_comm.request_ADSR_update.emit(self.t, adsr)
 
-        return adsr
+        return 0.707 * adsr
 
     def change_knob(self, value):
         # sliders que controlan valores de la senal envolvente
         knob = self.sender()
         units = "" if knob.name == "Sustain" else "ms"
-        message = knob.name + ": " + str(value / 44.1)[:3] + units
+        v = str(value / 44.1)[:3]
+        v = str(value * 2 / 44.1)[:3] if knob.name == "Release" else v
+        message = knob.name + ": " + v + units
         if knob.name == "Attack":
             self.a_knob = value
             self.mySlider2.setValue(self.d_knob)
@@ -291,42 +322,81 @@ class Synthesizer(QMainWindow):
 
         self.calculate_ASDR(self.a_knob, self.d_knob, self.s_knob, self.r_knob)
 
-    def waveform(self, form, frequency, adsr):
-        # se controla la forma de onda segun radiobutton seleccionado, se utilizan funciones ya existentes de numpy y scipy
-        if form == "sinusoidal":
-            armed_signal = np.sin(frequency * self.t * 2 * np.pi)
-        elif form == "triangle":
-            armed_signal = signal.sawtooth(frequency * self.t * 2 * np.pi, 0.5)
-        elif form == "sawtooth":
-            armed_signal = signal.sawtooth(frequency * self.t * 2 * np.pi, 1)
-        elif form == "square":
-            armed_signal = signal.square(frequency * self.t * 2 * np.pi)
-        elif form == "noise":
-            armed_signal = self.noise
+    def get_waveform(self, frequency, t):
+        if self.wave == "sinusoidal":
+            armed_signal = np.sin(frequency * t * 2 * np.pi)
+        elif self.wave == "triangle":
+            armed_signal = 0.707 * signal.sawtooth(frequency * t * 2 * np.pi, 0.5)
+        elif self.wave == "sawtooth":
+            armed_signal = 0.5 * signal.sawtooth(frequency * t * 2 * np.pi, 1)
+        elif self.wave == "square":
+            armed_signal = 0.5 * signal.square(frequency * t * 2 * np.pi)
+        elif self.wave == "noise":
+            armed_signal = 0.707 * (np.random.rand(2048) * 2) - 1
+        return armed_signal
 
-        # se aplican efectos segun esten activados por los checkbox
+    def waveform(self, frequency, played_chunk, release_chunk, chunk, feedback=3):
+        # se controla la forma de onda segun radiobutton seleccionado, se utilizan funciones ya existentes de numpy y scipy
+        t = np.linspace(
+            (played_chunk * chunk) / self.fs,
+            ((played_chunk + 1) * chunk) / self.fs,
+            chunk,
+            endpoint=False,
+        )
+        armed_signal = self.get_waveform(frequency, t)
+
+        if self.lfo.isChecked():
+            LFO = (self.mySlider5.value() / 200) * (
+                np.sin(self.mySlider4.value() * t * 2 * np.pi)
+                + (self.mySlider5.value() / 100)
+            )
+            armed_signal *= LFO
+
+        envelope = self.calculate_ASDR(
+            self.a_knob, self.d_knob, self.s_knob, self.r_knob
+        )
+        if played_chunk < 1 + (self.a_knob + self.d_knob) // chunk:
+            armed_signal *= envelope[
+                (played_chunk * chunk) : ((played_chunk + 1) * chunk)
+            ]
+        else:
+            if release_chunk > 0:
+                release = (
+                    0.707 * np.logspace(synth.s_knob / 11025, 0, synth.r_knob * 2) / 10
+                )
+                release = np.concatenate((release, np.zeros(synth.fs)))
+                armed_signal *= release[
+                    release_chunk * chunk : (release_chunk + 1) * chunk
+                ]
+            else:
+                armed_signal *= (
+                    0.707 * np.ones(chunk) * 10 ** (self.s_knob / 11025) / 10
+                )
+
         if self.lowpass_check.isChecked() and frequency != 15:
             armed_signal = self.apply_filter(armed_signal, self.mySlider6.value())
 
-        armed_signal = armed_signal * adsr
-        if self.lfo.isChecked():
-            armed_signal = armed_signal * self.LFO
+        # se aplican efectos segun esten activados por los checkbox
 
-        if self.delay_box.isChecked():
-            delayed_signal = np.concatenate(
-                (
-                    np.zeros(self.mySlider8.value()),
-                    armed_signal[: -self.mySlider8.value()],
+        if self.delay_box.isChecked() and feedback > 0:
+            delay_chunks = self.mySlider8.value() // chunk + 1
+            if played_chunk >= delay_chunks:
+                delayed_signal = self.waveform(
+                    frequency,
+                    played_chunk - delay_chunks,
+                    release_chunk - delay_chunks,
+                    chunk,
+                    feedback - 1,
                 )
-            )
-            armed_signal = armed_signal + delayed_signal * 0.5
+                armed_signal = armed_signal + delayed_signal * 0.5
 
-        armed_signal = armed_signal / np.max(np.abs(armed_signal))
+        self.signal_comm.request_signal_update.emit(
+            np.linspace(0, chunk / synth.fs, chunk), armed_signal
+        )
 
         return armed_signal
 
     def init_synth(self):
-        # self.t1 = Process(target=run_synth)
         self.t1 = Thread(target=run_synth, args=(self,), daemon=True)
         self.t1.do_run = True
         self.t1.start()
@@ -358,11 +428,7 @@ def run_synth(synth):
     flags = [False for _ in range(14)]
     notes = [246, 261, 277, 293, 311, 329, 349, 369, 392, 415, 440, 466]
     octave = 1
-    zeros = np.zeros(chunk)
-    fade_in = np.linspace(0, 1, num=chunk)
-    fade_out = np.linspace(1, 0, num=chunk)
     played_chunk = 0
-    offset = 0
 
     # listener de presion de botones del teclado
     while t1.do_run:
@@ -390,85 +456,23 @@ def run_synth(synth):
                     flags[i] = True
                     played_chunk = 0
                     release_chunk = 0
-                signal = np.sin(
-                    2
-                    * np.pi
-                    * notes[i]
-                    * octave
-                    * np.linspace(
-                        (played_chunk * chunk) / synth.fs,
-                        ((played_chunk + 1) * chunk) / synth.fs,
-                        chunk,
-                        endpoint=False,
-                    )
+                signal = synth.waveform(
+                    notes[i] * octave, played_chunk, release_chunk, chunk
                 )
-                envelope = synth.calculate_ASDR(
-                    synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
-                )
-                if played_chunk < 1 + (synth.a_knob + synth.d_knob) // chunk:
-                    signal *= envelope[
-                        (played_chunk * chunk) : ((played_chunk + 1) * chunk)
-                    ]
-                else:
-                    signal *= np.ones(chunk) * 10 ** (synth.s_knob / 11025) / 10
                 data = signal.astype(np.float32)
                 stream.write(data, chunk)
                 played_chunk += 1
-                # if not flags[i]:
-                #     flags = [False for _ in range(14)]
-                #     flags[i] = True
-                #     played_chunk = 0
-                # note = synth.waveform(
-                #     synth.wave,
-                #     notes[i] * octave,
-                #     synth.calculate_ASDR(
-                #         synth.a_knob, synth.d_knob, synth.s_knob, synth.r_knob
-                #     ),
-                # )
-                # data = note.astype(np.float32)
-                # init = played_chunk * chunk
-                # windowed = data[
-                #     init + offset : init + chunk + offset
-                # ]  # * ph  # * np.hanning(chunk)
-                # # print(max(note))
-                # stream.write(windowed, chunk)
-                # played_chunk += 1
-                # if played_chunk == 15:  # synth.fs // 2048 x 15 = 30720
-                #     offset = chunk * 14 % notes[i] * octave
-                #     played_chunk = 14  # 246hz -> 179.2 x 170 = 30430
-                # # else:
-                # #     offset = 0
             elif flags[i] and not keyboard.is_pressed(j):
-                # print(synth.r_knob)  # 11025
-                signal = np.sin(
-                    2
-                    * np.pi
-                    * notes[i]
-                    * octave
-                    * np.linspace(
-                        (played_chunk * chunk) / synth.fs,
-                        ((played_chunk + 1) * chunk) / synth.fs,
-                        chunk,
-                        endpoint=False,
-                    )
+                signal = synth.waveform(
+                    notes[i] * octave, played_chunk, release_chunk, chunk
                 )
-                release = np.logspace(synth.s_knob / 11025, 0, synth.r_knob) / 10
-                release = np.concatenate((release, np.zeros(synth.fs)))
-                signal *= release[release_chunk * chunk : (release_chunk + 1) * chunk]
+
                 data = signal.astype(np.float32)
                 stream.write(data, chunk)
                 release_chunk += 1
                 played_chunk += 1
-                if release_chunk > 10:
+                if release_chunk > 17:
                     flags[i] = False
-                # flags[i] = False
-                # init = played_chunk * chunk
-                # windowed = data[init + offset : init + chunk + offset]
-                # if played_chunk == 21:  # 44100 // 2048
-                #     flags[i] = False
-                #     windowed = zeros
-                # stream.write(windowed, chunk)
-                # played_chunk += 1
             else:
                 print(".")
 

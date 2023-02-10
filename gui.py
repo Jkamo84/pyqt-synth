@@ -59,8 +59,16 @@ class GUI:
 
         self.synth.myLabel5 = self.create_label("LFO offset", pos=(40, 370))
         self.synth.mySlider5 = self.create_slider(
-            "slider_lfo",
+            "slider_lfo_a",
             geo=(30, 400, 200, 30),
+            max=100,
+            default=100,
+            value_change=self.synth.active_lfo,
+        )
+        self.synth.myLabel5A = self.create_label("LFO amplitude", pos=(40, 430))
+        self.synth.mySlider5A = self.create_slider(
+            "slider_lfo",
+            geo=(30, 460, 200, 30),
             max=100,
             default=100,
             value_change=self.synth.active_lfo,
@@ -94,11 +102,20 @@ class GUI:
             default=4,
             value_change=self.synth.set_order,
         )
+        self.synth.myLabel7r = self.create_label("Filter resonance", pos=(300, 410))
+        self.synth.mySlider7r = self.create_slider(
+            "order_filter",
+            geo=(300, 440, 200, 30),
+            max=100,
+            min=0,
+            default=5,
+            value_change=self.synth.set_order,
+        )
 
-        self.synth.myLabel8 = self.create_label("Delay", pos=(40, 490))
+        self.synth.myLabel8 = self.create_label("Delay", pos=(40, 520))
         self.synth.mySlider8 = self.create_slider(
             "delay",
-            geo=(40, 520, 200, 30),
+            geo=(40, 550, 200, 30),
             default=11025,
             value_change=self.synth.set_delay,
         )

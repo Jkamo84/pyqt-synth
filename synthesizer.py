@@ -10,21 +10,20 @@ from PyQt5.QtCore import Qt, QObject, pyqtSignal
 import pyqtgraph as pg
 import numpy as np
 from scipy import signal
-from scipy.signal import butter, cheby1, lfilter
-import keyboard
-import pyaudio
+from scipy.signal import butter, cheby1, lfilter, iirpeak
+
 import time
-from threading import Thread, Event, current_thread
-from multiprocessing import Process
+from threading import Thread
 
 from gui import GUI
+from real_time_audio import run_synth
 
 ##################################################
 ## A real time-based synthetizer made with pyaudio and pyqt5
 ## functioning AM modulation, filters, delays and waveforms
 ##################################################
 ## Author: Juan Camilo Plazas
-## Version: 0.1.0
+## Version: 0.1.2
 ## Email: jkamo_84@hotmail.com
 ## Status: development
 ##################################################
@@ -67,25 +66,25 @@ class Synthesizer(QMainWindow):
         radiobutton2.name = "highpass"
         radiobutton2.toggled.connect(self.onClickedF)
         radiobutton2.setStyleSheet("color: white;")
-        radiobutton2.setGeometry(300, 420, 200, 32)
+        radiobutton2.setGeometry(400, 500, 100, 32)
 
         radiobutton2 = QRadioButton("Lowpass", self)
         radiobutton2.name = "lowpass"
         radiobutton2.toggled.connect(self.onClickedF)
         radiobutton2.setStyleSheet("color: white;")
-        radiobutton2.setGeometry(300, 460, 200, 32)
+        radiobutton2.setGeometry(400, 540, 100, 32)
 
         radiobutton2 = QRadioButton("Bandpass", self)
         radiobutton2.name = "bandpass"
         radiobutton2.toggled.connect(self.onClickedF)
         radiobutton2.setStyleSheet("color: white;")
-        radiobutton2.setGeometry(300, 500, 200, 32)
+        radiobutton2.setGeometry(300, 500, 100, 32)
 
         radiobutton2 = QRadioButton("Bandstop", self)
         radiobutton2.name = "bandstop"
         radiobutton2.toggled.connect(self.onClickedF)
         radiobutton2.setStyleSheet("color: white;")
-        radiobutton2.setGeometry(300, 540, 200, 32)
+        radiobutton2.setGeometry(300, 540, 100, 32)
 
         self.graphWidget1 = pg.PlotWidget(self)
         self.graphWidget1.setGeometry(300, 20, 300, 150)
@@ -133,7 +132,7 @@ class Synthesizer(QMainWindow):
         self.lfo.name = "lfo_box"
         self.lfo.toggled.connect(self.active_lfo)
         self.lfo.setStyleSheet("color: white;")
-        self.lfo.setGeometry(40, 250, 100, 32)
+        self.lfo.setGeometry(40, 280, 100, 32)
 
         self.lowpass_check = QCheckBox("Filter", self)
         self.lowpass_check.name = "lowpass"
@@ -144,23 +143,23 @@ class Synthesizer(QMainWindow):
         self.delay_box.name = "delay_box"
         self.delay_box.toggled.connect(self.set_delay)
         self.delay_box.setStyleSheet("color: white;")
-        self.delay_box.setGeometry(40, 430, 100, 32)
+        self.delay_box.setGeometry(40, 490, 100, 32)
 
         self.calculate_ASDR(self.a_knob, self.d_knob, self.s_knob, self.r_knob)
 
         order = 12  # orden del filtro
         nyq = 0.5 * self.fs  # máxima frecuencia
         normal_cutoff = 100 / nyq  # calculo real de frecuencia de corte
-        b, a = cheby1(
-            order, 12, normal_cutoff, btype="low", analog=True
-        )  # generacion de numerador y denominador del modelo matematico del filtro
+        # b, a = cheby1(
+        #     order, 12, normal_cutoff, btype="low", analog=True
+        # )  # generacion de numerador y denominador del modelo matematico del filtro
+        b, a = butter(self.forder, normal_cutoff, btype=self.ftype, analog=True)  # ge
         w, h = signal.freqs(b, a)
         self.data_filter = self.graphWidget3.plot(w * 22050, 20 * np.log10(abs(h)))
         self.graphWidget3.setLogMode(True, False)
         self.graphWidget3.setXRange(1, 5)
-        self.graphWidget3.setYRange(-50, 10)
-        self.filter_state1 = np.zeros(4)
-        self.filter_state2 = np.zeros(8)
+        self.graphWidget3.setYRange(-20, 10)
+        self.filter_state = np.zeros(4)
 
         self.signal_comm = SignalCommunicate()
         self.signal_comm.request_signal_update.connect(self.update_signal_graph)
@@ -173,6 +172,7 @@ class Synthesizer(QMainWindow):
         self.show()
 
         self.init_synth()
+        self.filter_state2 = np.zeros(8)
 
     def update_signal_graph(self, x, y):
         self.signal_line.setData(x, y)
@@ -188,9 +188,12 @@ class Synthesizer(QMainWindow):
 
     def set_order(self):
         self.forder = self.mySlider7.value()
+        self.filter_state = np.zeros(self.forder)
+        if self.ftype in ["bandpass", "bandstop"]:
+            self.filter_state = np.zeros(self.forder * 2)
         self.set_filter()
 
-    def set_filter(self):
+    def calculate_filter(self, analog=False):
         normal_cutoff = self.mySlider6.value()
         nyq = 0.5 * self.fs  # máxima frecuencia
         normal_cutoff = normal_cutoff / nyq  # calculo real de frecuencia de corte
@@ -202,39 +205,28 @@ class Synthesizer(QMainWindow):
                     (normal_cutoff + self.mySliderQ.value() * 0.5 / nyq),
                 ],
                 btype=self.ftype,
-                analog=True,
+                analog=analog,
             )  # generacion de numerador y denominador del modelo matematico del filtro
         else:
             b, a = butter(
-                self.forder, normal_cutoff, btype=self.ftype, analog=True
+                self.forder, normal_cutoff, btype=self.ftype, analog=analog
             )  # generacion de numerador y denominador del modelo matematico del filtro
-            b, a = cheby1(self.forder, 12, normal_cutoff, btype=self.ftype, analog=True)
+            # b, a = cheby1(
+            #     self.forder, 12, normal_cutoff, btype=self.ftype, analog=analog
+            # )
+        return b, a
+
+    def set_filter(self):
+        b, a = self.calculate_filter(analog=True)
         w, h = signal.freqs(b, a)
+        resonance = self.mySlider7r.value() / 10
         y = 20 * np.log10(abs(h))
         self.signal_comm.request_filter_update.emit(w * 22050, y)
 
-    def apply_filter(self, sig, cutoff):
-        nyq = 0.5 * self.fs  # máxima frecuencia
-        normal_cutoff = cutoff / nyq  # calculo real de frecuencia de corte
-        if self.ftype in ["bandpass", "bandstop"]:
-            b, a = butter(
-                self.forder,
-                [
-                    (cutoff - self.mySliderQ.value() * 0.5) / nyq,
-                    (cutoff + self.mySliderQ.value() * 0.5) / nyq,
-                ],
-                btype=self.ftype,
-                analog=False,
-            )  # generacion de numerador y denominador del modelo matematico del filtro
-            r, self.filter_state2 = lfilter(b, a, sig, axis=0, zi=self.filter_state2)
-        else:
-            b, a = butter(
-                self.forder, normal_cutoff, btype=self.ftype, analog=False
-            )  # generacion de numerador y denominador del modelo matematico del filtro
-            b, a = cheby1(self.forder, 6, normal_cutoff, btype=self.ftype, analog=False)
-            r, self.filter_state1 = lfilter(b, a, sig, axis=0, zi=self.filter_state1)
-            if self.ftype == "low":
-                r *= 2
+    def apply_filter(self, sig):
+        b, a = self.calculate_filter()
+        resonance = self.mySlider7r.value() / 100
+        r, self.filter_state = lfilter(b, a, sig, axis=0, zi=self.filter_state)
 
         return r
 
@@ -243,6 +235,9 @@ class Synthesizer(QMainWindow):
         radioButton = self.sender()
         if radioButton.isChecked():
             self.ftype = radioButton.name
+        self.filter_state = np.zeros(self.forder)
+        if radioButton.name in ["bandpass", "bandstop"]:
+            self.filter_state = np.zeros(self.forder * 2)
 
         self.set_filter()
 
@@ -251,29 +246,11 @@ class Synthesizer(QMainWindow):
         radioButton = self.sender()
         if radioButton.isChecked():
             self.wave = radioButton.wave
-            self.calculate_ASDR(self.a_knob, self.d_knob, self.s_knob, self.r_knob)
 
     def active_lfo(self):
         # generacion de onda moduladora segun posicion de sliders
-        radioButton = self.sender()
-        if radioButton.name != "slider_lfo":
-            if radioButton.isChecked():
-                self.LFO = (self.mySlider5.value() / 200) * (
-                    np.sin(self.mySlider4.value() * self.t * 2 * np.pi)
-                    + (self.mySlider5.value() / 100)
-                )
-            else:
-                self.LFO = np.ones(self.fs)
-        else:
-            self.LFO = (self.mySlider5.value() / 200) * (
-                np.sin(self.mySlider4.value() * self.t * 2 * np.pi)
-                + (self.mySlider5.value() / 100)
-            )
-
         message = "LFO: " + str(self.mySlider4.value()) + "Hz"
         self.myLabel4.setText(message)
-
-        self.calculate_ASDR(self.a_knob, self.d_knob, self.s_knob, self.r_knob)
 
     def calculate_ASDR(self, a, d, s, r):
         # se genera la forma que va a afectar a la senal resultante por medio de su amplitud
@@ -346,11 +323,10 @@ class Synthesizer(QMainWindow):
         armed_signal = self.get_waveform(frequency, t)
 
         if self.lfo.isChecked():
-            LFO = (self.mySlider5.value() / 200) * (
-                np.sin(self.mySlider4.value() * t * 2 * np.pi)
-                + (self.mySlider5.value() / 100)
-            )
-            armed_signal *= LFO
+            lfo_a = self.mySlider5A.value() / 200
+            lfo_off = self.mySlider5.value() / 200
+            LFO = lfo_a * (np.sin(self.mySlider4.value() * t * 2 * np.pi))
+            armed_signal = armed_signal * (LFO + lfo_off)
 
         envelope = self.calculate_ASDR(
             self.a_knob, self.d_knob, self.s_knob, self.r_knob
@@ -374,12 +350,12 @@ class Synthesizer(QMainWindow):
                 )
 
         if self.lowpass_check.isChecked() and frequency != 15:
-            armed_signal = self.apply_filter(armed_signal, self.mySlider6.value())
+            armed_signal = self.apply_filter(armed_signal)
 
         # se aplican efectos segun esten activados por los checkbox
 
         if self.delay_box.isChecked() and feedback > 0:
-            delay_chunks = self.mySlider8.value() // chunk + 1
+            delay_chunks = self.mySlider8.value() // chunk  # + 1
             if played_chunk >= delay_chunks:
                 delayed_signal = self.waveform(
                     frequency,
@@ -407,77 +383,6 @@ class Synthesizer(QMainWindow):
             time.sleep(1)
             self.t1.join()
         event.accept()
-
-
-def run_synth(synth):
-    t1 = current_thread()
-
-    p = pyaudio.PyAudio()
-
-    chunk = 2048
-    stream = p.open(
-        format=pyaudio.paFloat32,
-        channels=1,
-        rate=synth.fs,
-        output=True,
-        frames_per_buffer=chunk,
-    )
-
-    # teclas, notas y banderas de estado parametrizadas
-    keys = ["z", "s", "x", "d", "c", "v", "g", "b", "h", "n", "j", "m"]
-    flags = [False for _ in range(14)]
-    notes = [246, 261, 277, 293, 311, 329, 349, 369, 392, 415, 440, 466]
-    octave = 1
-    played_chunk = 0
-
-    # listener de presion de botones del teclado
-    while t1.do_run:
-        # time.sleep(0.002)
-        if keyboard.is_pressed("q") and not flags[-1]:
-            print("closed")
-            break
-
-        if keyboard.is_pressed("p") and not flags[-1]:
-            octave *= 2
-            flags[-1] = True
-        elif flags[-1] and not keyboard.is_pressed("p"):
-            flags[-1] = False
-
-        if keyboard.is_pressed("o") and not flags[-2]:
-            octave /= 2
-            flags[-2] = True
-        elif flags[-2] and not keyboard.is_pressed("o"):
-            flags[-2] = False
-
-        for i, j in enumerate(keys):
-            if keyboard.is_pressed(j):
-                if not flags[i]:
-                    flags = [False for _ in range(14)]
-                    flags[i] = True
-                    played_chunk = 0
-                    release_chunk = 0
-                signal = synth.waveform(
-                    notes[i] * octave, played_chunk, release_chunk, chunk
-                )
-                data = signal.astype(np.float32)
-                stream.write(data, chunk)
-                played_chunk += 1
-            elif flags[i] and not keyboard.is_pressed(j):
-                signal = synth.waveform(
-                    notes[i] * octave, played_chunk, release_chunk, chunk
-                )
-
-                data = signal.astype(np.float32)
-                stream.write(data, chunk)
-                release_chunk += 1
-                played_chunk += 1
-                if release_chunk > 17:
-                    flags[i] = False
-            else:
-                print(".")
-
-    stream.close()
-    p.terminate()
 
 
 if __name__ == "__main__":

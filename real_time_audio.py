@@ -3,6 +3,7 @@ import pyaudio
 from threading import current_thread
 
 import numpy as np
+import time
 
 
 def run_synth(synth):
@@ -69,8 +70,11 @@ def run_synth(synth):
                 played_chunk += 1
                 if release_chunk > 17:
                     flags[i] = False
-            # else:
-            # print(".")
+            else:
+                synth.set_counter()
+                # data = np.zeros(chunk).astype(np.float32)
+                # stream.write(np.zeros(chunk), chunk)
+                # time.sleep(0.00001)
 
     stream.close()
     p.terminate()

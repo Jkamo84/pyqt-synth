@@ -17,6 +17,7 @@ from PyQt5.QtCore import Qt
 class GUI:
     def __init__(self, synth: object) -> None:
         self.synth = synth
+        self.synth.v_label = self.create_label("", pos=(1050, 570))
         self.synth.myLabel1 = self.create_label("Attack: 0ms", pos=(40, 10))
         self.synth.myLabel2 = self.create_label("Decay: 0ms", pos=(40, 70))
         self.synth.myLabel3 = self.create_label("Sustain: 0", pos=(40, 130))
@@ -98,8 +99,8 @@ class GUI:
         self.synth.mySlider7 = self.create_slider(
             "order_filter",
             geo=(300, 380, 200, 30),
-            max=16,
-            default=4,
+            max=12,
+            default=2,
             value_change=self.synth.set_order,
         )
         self.synth.myLabel7r = self.create_label("Filter resonance", pos=(300, 410))

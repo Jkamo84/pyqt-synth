@@ -28,6 +28,8 @@ from real_time_audio import run_synth
 ## Status: development
 ##################################################
 
+VERSION = "0.1.2"
+
 
 class SignalCommunicate(QObject):
     request_filter_update = pyqtSignal(np.ndarray, np.ndarray)
@@ -45,7 +47,7 @@ class Synthesizer(QMainWindow):
         self.LFO = np.ones(self.fs)
         self.t = np.linspace(0, 1, self.fs)
         self.ftype = "low"
-        self.forder = 4
+        self.forder = 2
         self.delay = True
 
         p = self.palette()
@@ -147,19 +149,20 @@ class Synthesizer(QMainWindow):
 
         self.calculate_ASDR(self.a_knob, self.d_knob, self.s_knob, self.r_knob)
 
-        order = 12  # orden del filtro
+        order = 2  # orden del filtro
         nyq = 0.5 * self.fs  # máxima frecuencia
         normal_cutoff = 100 / nyq  # calculo real de frecuencia de corte
-        # b, a = cheby1(
-        #     order, 12, normal_cutoff, btype="low", analog=True
-        # )  # generacion de numerador y denominador del modelo matematico del filtro
-        b, a = butter(self.forder, normal_cutoff, btype=self.ftype, analog=True)  # ge
+        b, a = cheby1(
+            order, 12, normal_cutoff, btype="low", analog=True
+        )  # generacion de numerador y denominador del modelo matematico del filtro
+        # b, a = butter(self.forder, normal_cutoff, btype=self.ftype, analog=True)  # ge
         w, h = signal.freqs(b, a)
+        h *= 2
         self.data_filter = self.graphWidget3.plot(w * 22050, 20 * np.log10(abs(h)))
         self.graphWidget3.setLogMode(True, False)
         self.graphWidget3.setXRange(1, 5)
         self.graphWidget3.setYRange(-20, 10)
-        self.filter_state = np.zeros(4)
+        self.filter_state = np.zeros(2)
 
         self.signal_comm = SignalCommunicate()
         self.signal_comm.request_signal_update.connect(self.update_signal_graph)
@@ -172,7 +175,6 @@ class Synthesizer(QMainWindow):
         self.show()
 
         self.init_synth()
-        self.filter_state2 = np.zeros(8)
 
     def update_signal_graph(self, x, y):
         self.signal_line.setData(x, y)
@@ -208,18 +210,20 @@ class Synthesizer(QMainWindow):
                 analog=analog,
             )  # generacion de numerador y denominador del modelo matematico del filtro
         else:
-            b, a = butter(
-                self.forder, normal_cutoff, btype=self.ftype, analog=analog
-            )  # generacion de numerador y denominador del modelo matematico del filtro
-            # b, a = cheby1(
-            #     self.forder, 12, normal_cutoff, btype=self.ftype, analog=analog
-            # )
+            # b, a = butter(
+            #     self.forder, normal_cutoff, btype=self.ftype, analog=analog
+            # )  # generacion de numerador y denominador del modelo matematico del filtro
+            b, a = cheby1(
+                self.forder, 12, normal_cutoff, btype=self.ftype, analog=analog
+            )
         return b, a
 
     def set_filter(self):
         b, a = self.calculate_filter(analog=True)
         w, h = signal.freqs(b, a)
         resonance = self.mySlider7r.value() / 10
+        if self.ftype not in ["bandpass", "bandstop"]:
+            h *= 2
         y = 20 * np.log10(abs(h))
         self.signal_comm.request_filter_update.emit(w * 22050, y)
 
@@ -228,6 +232,8 @@ class Synthesizer(QMainWindow):
         resonance = self.mySlider7r.value() / 100
         r, self.filter_state = lfilter(b, a, sig, axis=0, zi=self.filter_state)
 
+        if self.ftype not in ["bandpass", "bandstop"]:
+            r *= 2
         return r
 
     def onClickedF(self):
@@ -371,6 +377,9 @@ class Synthesizer(QMainWindow):
         )
 
         return armed_signal
+
+    def set_counter(self):
+        self.v_label.setText(VERSION)
 
     def init_synth(self):
         self.t1 = Thread(target=run_synth, args=(self,), daemon=True)

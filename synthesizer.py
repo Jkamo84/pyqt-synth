@@ -30,7 +30,7 @@ from real_time_audio import run_synth
 ## Status: development
 ##################################################
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 SAMPLE_RATE = 44100
 
 

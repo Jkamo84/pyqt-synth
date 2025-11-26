@@ -1,9 +1,9 @@
 # pyqt-synth
 
-A real-time polyphonic synthesizer application built with Python and PyQt5.
+A real-time monophonic synthesizer application built with Python and PyQt5.
 
-![pyqt-synth Screenshot](https://via.placeholder.com/600x400.png?text=Add+a+screenshot+of+your+app+here!)
-*A screenshot of the synthesizer interface would be great here!*
+<img width="1098" height="631" alt="image" src="https://github.com/user-attachments/assets/ab3cf243-00cc-4897-b9a6-ad645553d18d" />
+
 
 ## Features
 

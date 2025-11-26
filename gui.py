@@ -1,17 +1,17 @@
 from typing import Callable
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication,
-    QGroupBox,
-    QMainWindow,
-    QSlider,
-    QLabel,
-    QRadioButton,
-    QPushButton,
     QCheckBox,
+    QGroupBox,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QRadioButton,
+    QSlider,
     QVBoxLayout,
 )
-from PyQt5.QtCore import Qt
 
 
 class GUI:
@@ -82,7 +82,7 @@ class GUI:
             min=200,
             max=8000,
             default=200,
-            value_change=self.synth.set_filter,
+            value_change=lambda: self.synth.set_filter(),
         )
 
         self.synth.myLabelQ = self.create_label("Band Width", pos=(300, 290))
@@ -92,7 +92,7 @@ class GUI:
             min=10,
             max=1000,
             default=10,
-            value_change=self.synth.set_filter,
+            value_change=lambda: self.synth.set_filter(),
         )
 
         self.synth.myLabel7 = self.create_label("Filter Order", pos=(300, 350))
@@ -103,22 +103,13 @@ class GUI:
             default=2,
             value_change=self.synth.set_order,
         )
-        self.synth.myLabel7r = self.create_label("Filter resonance", pos=(300, 410))
-        self.synth.mySlider7r = self.create_slider(
-            "order_filter",
-            geo=(300, 440, 200, 30),
-            max=100,
-            min=0,
-            default=5,
-            value_change=self.synth.set_order,
-        )
 
         self.synth.myLabel8 = self.create_label("Delay", pos=(40, 520))
         self.synth.mySlider8 = self.create_slider(
             "delay",
             geo=(40, 550, 200, 30),
             default=11025,
-            value_change=self.synth.set_delay,
+            # value_change=self.synth.set_delay, # This is not needed
         )
 
     def create_slider(

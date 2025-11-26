@@ -1,14 +1,64 @@
-# **pyqt-synth - Python Synthetizer - Juan Camilo Plazas**
+# pyqt-synth
 
-A real time-based sinthetizer made with python and pyqt5
+A real-time polyphonic synthesizer application built with Python and PyQt5.
 
-## **Quickstart**
+![pyqt-synth Screenshot](https://via.placeholder.com/600x400.png?text=Add+a+screenshot+of+your+app+here!)
+*A screenshot of the synthesizer interface would be great here!*
 
-### **Create virtualenv and install dependencies**
+## Features
 
-    python -m virtualenv synth
-    pip install -r requirements.txt
+*   Real-time audio synthesis.
+*   Interactive GUI built with PyQt5.
+*   Multiple waveform oscillators (e.g., Sine, Square, Sawtooth).
+*   ADSR (Attack, Decay, Sustain, Release) envelope controls.
+*   (Add any other features your synthesizer has!)
 
-### **Run Synthetizer**
+## Prerequisites
 
-    python synthetizer.py
+*   Python 3.8+
+*   `pip` and `venv`
+
+## Quickstart
+
+Follow these steps to get the synthesizer up and running.
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/pyqt-synth.git
+cd pyqt-synth
+```
+
+### 2. Create a Virtual Environment and Install Dependencies
+
+It's recommended to use a virtual environment to manage project dependencies.
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+
+# Activate the virtual environment
+# On Windows:
+.venv\Scripts\activate
+# On macOS/Linux:
+source .venv/bin/activate
+
+# Install the required packages
+pip install -r requirements.txt
+```
+
+### 3. Run the Synthesizer
+
+Once the dependencies are installed, you can start the application.
+
+```bash
+python synthetizer.py
+```
+
+## Author
+
+*   **Juan Camilo Plazas**
+
+## License
+
+This project is licensed under the MIT License - see the `LICENSE` file for details.

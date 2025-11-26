@@ -1,9 +1,9 @@
-import keyboard
-import pyaudio
+import time
 from threading import current_thread
 
+import keyboard
 import numpy as np
-import time
+import pyaudio
 
 
 def run_synth(synth):

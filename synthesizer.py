@@ -25,7 +25,7 @@ from real_time_audio import run_synth
 ## functioning AM modulation, filters, delays and waveforms
 ##################################################
 ## Author: Juan Camilo Plazas
-## Version: 0.1.2
+## Version: 0.1.3
 ## Email: jkamo_84@hotmail.com
 ## Status: development
 ##################################################
@@ -80,7 +80,7 @@ class Synthesizer(QMainWindow):
         self.signal_comm.request_ADSR_update.connect(self.update_ADSR_graph)
         self.signal_comm.request_filter_update.connect(self.update_filter_graph)
 
-        # inicializar ventana de GUI
+        # init GUI
         self.setGeometry(50, 50, 1100, 600)
         self.setWindowTitle("Synthesizer")
         self.show()
@@ -200,8 +200,8 @@ class Synthesizer(QMainWindow):
 
     def calculate_filter_coeffs(self, analog=False):
         normal_cutoff = self.mySlider6.value()
-        nyq = 0.5 * self.fs  # máxima frecuencia
-        normal_cutoff = normal_cutoff / nyq  # calculo real de frecuencia de corte
+        nyq = 0.5 * self.fs  # max freq
+        normal_cutoff = normal_cutoff / nyq  # real cut freq
         if self.ftype in ["bandpass", "bandstop"]:
             b, a = butter(
                 self.forder,
@@ -240,7 +240,7 @@ class Synthesizer(QMainWindow):
         return r
 
     def onClickedF(self):
-        # control de los radiobutton de tipo de filtro
+        # radiobutton control
         radioButton = self.sender()
         if radioButton.isChecked():
             self.ftype = radioButton.name
@@ -251,13 +251,13 @@ class Synthesizer(QMainWindow):
         self.set_filter()
 
     def onClicked(self):
-        # control de radiobutton de tipo de onda
+        # radiobutton control
         radioButton = self.sender()
         if radioButton.isChecked():
             self.wave = radioButton.wave
 
     def active_lfo(self):
-        # generacion de onda moduladora segun posicion de sliders
+        # slider control
         message = f"LFO: {self.mySlider4.value()}Hz"
         self.myLabel4.setText(message)
 
@@ -328,7 +328,7 @@ class Synthesizer(QMainWindow):
         return armed_signal
 
     def waveform(self, frequency, played_chunk, release_chunk, chunk, feedback=3):
-        # se controla la forma de onda segun radiobutton seleccionado, se utilizan funciones ya existentes de numpy y scipy
+        # waveform control based on GUI settings
         t = np.linspace(
             (played_chunk * chunk) / self.fs,
             ((played_chunk + 1) * chunk) / self.fs,
@@ -364,7 +364,7 @@ class Synthesizer(QMainWindow):
         if self.lowpass_check.isChecked() and frequency != 15:
             armed_signal = self.apply_filter(armed_signal)
 
-        # se aplican efectos segun esten activados por los checkbox
+        # checkbox effects
 
         # NOTE: Recursive delay is very inefficient. A delay buffer (ring buffer)
         # would be a much better approach for performance.

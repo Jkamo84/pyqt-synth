@@ -55,6 +55,14 @@ Once the dependencies are installed, you can start the application.
 python synthetizer.py
 ```
 
+### Explanation of the `PyInstaller` command:
+
+*   `pyinstaller`: The command to run the tool.
+*   `--name "pyqt-synth"`: Sets the name of your executable file.
+*   `--onefile`: Bundles all necessary files and libraries into a single `.exe` file for easy distribution.
+*   `--windowed`: This is important for a GUI application. It prevents a console window from appearing in the background when you run the executable.
+*   `synthetizer.py`: The entry point script for your application.
+
 ## Author
 
 *   **Juan Camilo Plazas**

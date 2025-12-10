@@ -1,0 +1,18 @@
+[project]
+name = "pyqt-synth"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "black==25.11.0",
+    "isort==7.0.0",
+    "keyboard==0.13.4",
+    "mypy==1.18.2",
+    "numpy==1.24.1",
+    "pyaudio==0.2.13",
+    "pyqt5==5.15.8",
+    "pyqt5-sip==12.11.0",
+    "pyqtgraph==0.13.1",
+    "scipy==1.10.0",
+]
